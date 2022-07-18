@@ -8,6 +8,16 @@ module Isuconp
   class App < Sinatra::Base
     use Rack::Session::Dalli, autofix_keys: true, secret: ENV['ISUCONP_SESSION_SECRET'] || 'sendagaya', memcache_server: ENV['ISUCONP_MEMCACHED_ADDRESS'] || 'localhost:11211'
     use Rack::Flash
+
+    configure :development do
+      require 'sinatra/reloader'
+      register Sinatra::Reloader
+    end
+
+    configure do
+      enable :logging
+    end
+
     set :public_folder, File.expand_path('../../public', __FILE__)
 
     UPLOAD_LIMIT = 10 * 1024 * 1024 # 10mb
@@ -222,6 +232,7 @@ module Isuconp
     end
 
     get '/' do
+      p "---------------"
       me = get_session_user()
 
       results = db.query('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')

@@ -1,3 +1,4 @@
+version: "3.9"
 services:
   nginx:
     image: nginx:1.22
@@ -11,7 +12,9 @@ services:
 
   app:
     # Go実装の場合は golang/ PHP実装の場合は php/
-    build: ruby/
+    build:
+      dockerfile: ruby/Dockerfile
+      context: ./
     environment:
       ISUCONP_DB_HOST: mysql
       ISUCONP_DB_PORT: 3306
@@ -22,13 +25,15 @@ services:
     links:
       - mysql
       - memcached
+    command: bundle exec unicorn -c unicorn_config.rb
     volumes:
       - ./public:/home/public
+      - ./ruby:/home/webapp
     init: true
     deploy:
       resources:
         limits:
-          cpus: '1'
+          cpus: "1"
           memory: 1g
 
   mysql:
@@ -46,7 +51,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
+          cpus: "1"
           memory: 1g
 
   memcached:

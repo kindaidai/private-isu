@@ -1,8 +1,5 @@
-FROM ruby:3.1-buster
+FROM ruby:2.7-buster
 
-RUN mkdir -p /home/webapp
-COPY . /home/webapp
 WORKDIR /home/webapp
-RUN bundle config set --local path 'vendor/bundle'
+COPY ruby/Gemfile* /home/webapp
 RUN bundle install
-CMD bundle exec foreman start
