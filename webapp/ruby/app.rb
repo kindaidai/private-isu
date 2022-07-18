@@ -3,6 +3,7 @@ require 'mysql2'
 require 'rack-flash'
 require 'shellwords'
 require 'rack/session/dalli'
+require 'fileutils'
 
 module Isuconp
   class App < Sinatra::Base
@@ -23,6 +24,8 @@ module Isuconp
     UPLOAD_LIMIT = 10 * 1024 * 1024 # 10mb
 
     POSTS_PER_PAGE = 20
+
+    IMAGE_DIR = File.expand_path('../../public/image', __FILE__)
 
     helpers do
       def config
@@ -232,8 +235,6 @@ module Isuconp
     end
 
     get '/' do
-      p "---------------"
-      p config
       me = get_session_user()
 
       results = db.query('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')
@@ -315,33 +316,39 @@ module Isuconp
       end
 
       if params['file']
-        mime = ''
+        mime, ext = '', ''
         # 投稿のContent-Typeからファイルのタイプを決定する
         if params["file"][:type].include? "jpeg"
-          mime = "image/jpeg"
+          mime, ext = "image/jpeg", 'jpg'
         elsif params["file"][:type].include? "png"
-          mime = "image/png"
+          mime, ext = "image/png", 'png'
         elsif params["file"][:type].include? "gif"
-          mime = "image/gif"
+          mime, ext = "image/gif", 'gif'
         else
           flash[:notice] = '投稿できる画像形式はjpgとpngとgifだけです'
           redirect '/', 302
         end
 
-        if params['file'][:tempfile].read.length > UPLOAD_LIMIT
+        tempfile = params['file'][:tempfile]
+
+        if tempfile.size > UPLOAD_LIMIT
           flash[:notice] = 'ファイルサイズが大きすぎます'
           redirect '/', 302
         end
 
-        params['file'][:tempfile].rewind
         query = 'INSERT INTO `posts` (`user_id`, `mime`, `imgdata`, `body`) VALUES (?,?,?,?)'
         db.prepare(query).execute(
           me[:id],
           mime,
-          params["file"][:tempfile].read,
+          '',
           params["body"],
         )
         pid = db.last_id
+
+        imgfile = IMAGE_DIR + "/#{pid}.#{ext}"
+
+        FileUtils.mv(params['file'][:tempfile], imgfile)
+        FileUtils.chmod(0644, imgfile)
 
         redirect "/posts/#{pid}", 302
       else
@@ -361,6 +368,11 @@ module Isuconp
           (params[:ext] == "png" && post[:mime] == "image/png") ||
           (params[:ext] == "gif" && post[:mime] == "image/gif")
         headers['Content-Type'] = post[:mime]
+        imgfile = IMAGE_DIR + "/#{post[:id]}.#{params[:ext]}"
+        f = File.open(imgfile, "w")
+        f.write(post[:imgdata])
+        f.close()
+
         return post[:imgdata]
       end
 
