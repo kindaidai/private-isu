@@ -4,6 +4,7 @@ require 'rack-flash'
 require 'shellwords'
 require 'rack/session/dalli'
 require 'fileutils'
+require 'newrelic_rpm'
 
 module Isuconp
   class App < Sinatra::Base
