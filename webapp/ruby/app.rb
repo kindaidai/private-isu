@@ -4,7 +4,8 @@ require 'rack-flash'
 require 'shellwords'
 require 'rack/session/dalli'
 require 'fileutils'
-require 'newrelic_rpm'
+# require 'newrelic_rpm'
+require 'redis'
 
 module Isuconp
   class App < Sinatra::Base
@@ -29,6 +30,10 @@ module Isuconp
     IMAGE_DIR = File.expand_path('../../public/image', __FILE__)
 
     helpers do
+      def redis_client
+        Redis.new(host: ENV["REDIS_HOST"], port: ENV["REDIS_PORT"])
+      end
+
       def config
         @config ||= {
           db: {
@@ -115,23 +120,48 @@ module Isuconp
       def make_posts(results, all_comments: false)
         posts = []
         results.to_a.each do |post|
-          post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
-            post[:id]
-          ).first[:count]
+          # コメントカウントのキャッシュ化
+          all_comment_count_key = "comments.#{post[:id]}.count"
+          all_comment_count = redis_client.get(all_comment_count_key)
+          if all_comment_count
+            post[:comment_count] = all_comment_count.to_i
+          else
+            post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
+              post[:id]
+            ).first[:count]
 
-          query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
-          unless all_comments
-            query += ' LIMIT 3'
+            redis_client.setex(all_comment_count_key, 10, post[:comments_count])
           end
-          comments = db.prepare(query).execute(
-            post[:id]
-          ).to_a
-          comments.each do |comment|
-            comment[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
-              comment[:user_id]
-            ).first
+
+          # コメントのキャッシュ化
+          all_comments_key = "comments.#{post[:id]}.#{all_comments.to_s}"
+          cached_comments = redis_client.get(all_comments_key)
+          if cached_comments
+            post[:comments] = Marshal.load(cached_comments)
+          else
+            query = <<~SQL
+              SELECT comments.*, users.account_name
+              FROM `comments`
+              INNER JOIN users ON comments.user_id = users.id
+              WHERE `post_id` = ?
+              ORDER BY `created_at` DESC
+            SQL
+            unless all_comments
+              query += ' LIMIT 3'
+            end
+            comments = db.prepare(query).execute(
+              post[:id]
+            ).to_a
+            comments.each do |comment|
+              comment[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+                comment[:user_id]
+              ).first
+            end
+            post[:comments] = comments.reverse
+
+            key = "comments.#{post[:id]}.#{all_comments.to_s}"
+            redis_client.setex(key, 10, Marshal.dump(post[:comments]))
           end
-          post[:comments] = comments.reverse
 
           # post[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
           #   post[:user_id]

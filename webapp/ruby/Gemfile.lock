@@ -17,6 +17,7 @@ GEM
     rack-protection (2.0.8.1)
       rack
     raindrops (0.20.0)
+    redis (4.7.1)
     ruby2_keywords (0.0.5)
     sinatra (2.0.8.1)
       mustermann (~> 1.0)
@@ -48,6 +49,7 @@ DEPENDENCIES
   newrelic_rpm
   rack (>= 2.1.0, < 2.2.0)
   rack-flash3
+  redis
   sinatra
   sinatra-contrib
   unicorn

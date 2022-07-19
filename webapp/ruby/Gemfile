@@ -12,3 +12,4 @@ gem "rack-flash3"
 gem 'connection_pool'
 gem "dalli"
 gem "newrelic_rpm"
+gem "redis"
